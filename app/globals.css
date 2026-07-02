@@ -85,6 +85,18 @@ button {
    once one is). The back button only exists to return from that
    single-pane note view, so it's hidden entirely above the
    breakpoint. */
+/* Base layout for the two workspace panes. Kept here (not as inline
+   styles on the elements) specifically so the mobile display:none
+   override below — which targets these same classes — can win the
+   cascade. An inline style on the element itself would always beat
+   any external stylesheet rule regardless of specificity, silently
+   breaking the mobile single-pane switch. */
+.workspace-sidebar,
+.workspace-main {
+  display: flex;
+  flex-direction: column;
+}
+
 .mobile-back-button {
   display: none;
 }
@@ -106,11 +118,16 @@ button {
   }
 
   .workspace-shell[data-mobile-view="list"] .workspace-main {
-    display: none;
+    /* !important kept defensively — the display:flex base rule above
+       and this override are both plain classes, so specificity alone
+       is enough now that WorkspaceClient.jsx no longer sets display
+       inline on this element (an inline style would silently have
+       beaten any class rule here, which is what broke this before). */
+    display: none !important;
   }
 
   .workspace-shell[data-mobile-view="note"] .workspace-sidebar {
-    display: none;
+    display: none !important;
   }
 
   .mobile-back-button {

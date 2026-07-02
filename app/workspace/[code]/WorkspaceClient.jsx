@@ -163,8 +163,6 @@ export default function WorkspaceClient() {
           flexShrink: 0,
           borderRight: "1px solid rgba(44,24,16,0.1)",
           background: "#fff",
-          display: "flex",
-          flexDirection: "column",
         }}
       >
         <div style={{ padding: "18px 18px 12px", borderBottom: "1px solid rgba(44,24,16,0.08)" }}>
@@ -303,7 +301,7 @@ export default function WorkspaceClient() {
         </button>
       </aside>
 
-      <main className="workspace-main" style={{ flex: 1, display: "flex", flexDirection: "column", background: "var(--cream)" }}>
+      <main className="workspace-main" style={{ flex: 1, background: "var(--cream)" }}>
         {selectedNote ? (
           <>
             <div
