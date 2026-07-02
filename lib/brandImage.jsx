@@ -15,21 +15,30 @@ const DARK_BROWN = "#2C1810";
 const YELLOW = "#F5C842";
 const CREAM = "#FFFDF5";
 
-// Simplified giraffe silhouette, redrawn as a handful of SVG shapes
-// (rather than the detailed path used in components/GiraffeLogo.jsx)
-// so it stays crisp and legible at small render sizes.
+// Same giraffe silhouette as components/GiraffeLogo.jsx (kept as a
+// duplicate here rather than shared, since that component uses
+// JSX prop conventions React-DOM expects, while these render through
+// Satori for build-time image generation — safest to keep them
+// decoupled even though the artwork should stay in sync).
 export function GiraffeMark({ size = 120 }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 100 100" style={{ display: "flex" }}>
-      <rect x="46" y="38" width="8" height="34" rx="3" fill={DARK_BROWN} />
-      <rect x="40" y="14" width="9" height="30" rx="4" fill={DARK_BROWN} transform="rotate(-8 44 30)" />
-      <circle cx="43" cy="14" r="9" fill={DARK_BROWN} />
-      <circle cx="40" cy="10" r="2.4" fill={CREAM} />
-      <rect x="30" y="66" width="9" height="20" rx="3" fill={DARK_BROWN} />
-      <rect x="52" y="66" width="9" height="20" rx="3" fill={DARK_BROWN} />
-      <circle cx="60" cy="30" r="4" fill={AMBER} />
-      <circle cx="34" cy="50" r="3.4" fill={AMBER} />
-      <circle cx="52" cy="55" r="3" fill={AMBER} />
+    <svg width={size} height={size} viewBox="0 0 64 64" style={{ display: "flex" }}>
+      <rect x="22" y="46" width="4" height="14" rx="2" fill={DARK_BROWN} />
+      <rect x="30" y="46" width="4" height="14" rx="2" fill={DARK_BROWN} />
+      <rect x="38" y="46" width="4" height="14" rx="2" fill={DARK_BROWN} />
+      <ellipse cx="30" cy="42" rx="14" ry="9" fill={DARK_BROWN} />
+      <path d="M16 38 q-6 2 -5 10" stroke={DARK_BROWN} strokeWidth="2.5" fill="none" strokeLinecap="round" />
+      <path d="M38 36 C40 26 40 18 44 10 L50 10 C48 18 48 26 46 38 Z" fill={DARK_BROWN} />
+      <ellipse cx="47" cy="9" rx="7" ry="5" fill={DARK_BROWN} />
+      <ellipse cx="52.5" cy="10.5" rx="3.5" ry="3" fill={DARK_BROWN} />
+      <ellipse cx="42" cy="5" rx="2.2" ry="3.5" fill={DARK_BROWN} transform="rotate(-30 42 5)" />
+      <ellipse cx="51" cy="3.5" rx="2.2" ry="3.5" fill={DARK_BROWN} transform="rotate(20 51 3.5)" />
+      <circle cx="44.5" cy="2" r="1.6" fill={DARK_BROWN} />
+      <circle cx="49" cy="1.5" r="1.6" fill={DARK_BROWN} />
+      <circle cx="48.5" cy="8.5" r="1" fill={CREAM} />
+      <circle cx="43" cy="20" r="2.2" fill={CREAM} />
+      <circle cx="41" cy="30" r="2" fill={CREAM} />
+      <circle cx="33" cy="40" r="2.4" fill={CREAM} />
     </svg>
   );
 }

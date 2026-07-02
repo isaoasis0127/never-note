@@ -168,10 +168,21 @@ export default function WorkspaceClient() {
         }}
       >
         <div style={{ padding: "18px 18px 12px", borderBottom: "1px solid rgba(44,24,16,0.08)" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
-            <GiraffeLogo size={22} color="var(--dark-brown)" />
-            <strong style={{ fontFamily: "var(--font-heading)", fontSize: 16 }}>{code}</strong>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+            <GiraffeLogo size={24} color="var(--dark-brown)" />
+            <strong style={{ fontFamily: "var(--font-heading)", fontSize: 18, color: "var(--dark-brown)" }}>Never Note</strong>
           </div>
+          <p
+            style={{
+              margin: "0 0 12px",
+              fontSize: 12,
+              color: "#a89685",
+              fontFamily: "var(--font-body)",
+              letterSpacing: "0.02em",
+            }}
+          >
+            ワークスペース: <span style={{ fontWeight: 600, color: "#7a6a5c" }}>{code}</span>
+          </p>
           <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "#7a6a5c", marginBottom: 12 }}>
             <span
               style={{

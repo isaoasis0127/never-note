@@ -1,20 +1,33 @@
-export default function GiraffeLogo({ size = 32, color = "#2C1810", className = "" }) {
+export default function GiraffeLogo({ size = 32, color = "#2C1810", spotColor = "#FFFDF5", className = "" }) {
   return (
     <svg
       width={size}
       height={size}
       viewBox="0 0 64 64"
-      fill="none"
       xmlns="http://www.w3.org/2000/svg"
       className={className}
       aria-hidden="true"
     >
-      {/* Minimal giraffe silhouette: head tilted forward over a long neck. */}
-      <path
-        d="M27 4c-1.6 0-3 1.2-3.3 2.8l-.4 2.1c-1.7.4-3 1.9-3 3.7 0 1 .4 1.9 1 2.6-1.1 1-1.8 2.5-1.8 4.1 0 1.4.5 2.6 1.3 3.6-2.8 4.2-4.3 10-4.3 16.4v14.1c0 1.2.4 2.3 1.1 3.2l-3.4 5.9a1.8 1.8 0 0 0 1.6 2.7h3.1a1.8 1.8 0 0 0 1.6-1l2.6-5.2c.5.1 1 .1 1.5.1h1v4.3c0 1 .8 1.8 1.8 1.8h2.8c1 0 1.8-.8 1.8-1.8v-4.6c1.9-.6 3.5-1.8 4.7-3.4l3 5.9a1.8 1.8 0 0 0 1.6 1h3.1a1.8 1.8 0 0 0 1.6-2.7l-3.7-6.5c.3-.8.5-1.7.5-2.7V39.3c0-4.6-.9-9-2.6-12.6.6-.9.9-1.9.9-3 0-1.7-.8-3.3-2-4.3.4-.7.7-1.5.7-2.4 0-1.9-1.4-3.4-3.2-3.7l-.4-2C33 5.2 31.6 4 30 4h-3z"
-        fill={color}
-      />
-      <circle cx="30.5" cy="12.5" r="1.3" fill="#FFFDF5" />
+      {/* Full-body giraffe silhouette: legs, body, tail, long spotted
+          neck, head with snout/ears/ossicones. Built from simple
+          shapes (rather than one hand-tuned path) so it stays a
+          recognizable giraffe even at small icon sizes. */}
+      <rect x="22" y="46" width="4" height="14" rx="2" fill={color} />
+      <rect x="30" y="46" width="4" height="14" rx="2" fill={color} />
+      <rect x="38" y="46" width="4" height="14" rx="2" fill={color} />
+      <ellipse cx="30" cy="42" rx="14" ry="9" fill={color} />
+      <path d="M16 38 q-6 2 -5 10" stroke={color} strokeWidth="2.5" fill="none" strokeLinecap="round" />
+      <path d="M38 36 C40 26 40 18 44 10 L50 10 C48 18 48 26 46 38 Z" fill={color} />
+      <ellipse cx="47" cy="9" rx="7" ry="5" fill={color} />
+      <ellipse cx="52.5" cy="10.5" rx="3.5" ry="3" fill={color} />
+      <ellipse cx="42" cy="5" rx="2.2" ry="3.5" fill={color} transform="rotate(-30 42 5)" />
+      <ellipse cx="51" cy="3.5" rx="2.2" ry="3.5" fill={color} transform="rotate(20 51 3.5)" />
+      <circle cx="44.5" cy="2" r="1.6" fill={color} />
+      <circle cx="49" cy="1.5" r="1.6" fill={color} />
+      <circle cx="48.5" cy="8.5" r="1" fill={spotColor} />
+      <circle cx="43" cy="20" r="2.2" fill={spotColor} />
+      <circle cx="41" cy="30" r="2" fill={spotColor} />
+      <circle cx="33" cy="40" r="2.4" fill={spotColor} />
     </svg>
   );
 }
