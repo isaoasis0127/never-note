@@ -13,10 +13,14 @@ import {
   deleteDoc,
   setDoc,
   addDoc,
+  arrayUnion,
+  arrayRemove,
 } from "firebase/firestore";
 import { ref, onDisconnect, onValue, remove, set } from "firebase/database";
-import { db, rtdb } from "@/lib/firebase";
+import { ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
+import { db, rtdb, storage } from "@/lib/firebase";
 import { isValidWorkspaceCode } from "@/lib/workspaceCode";
+import { MAX_ATTACHMENT_SIZE, MAX_ATTACHMENTS_PER_NOTE, formatFileSize, attachmentStoragePath } from "@/lib/attachments";
 import GiraffeLogo from "@/components/GiraffeLogo";
 
 const AUTOSAVE_DELAY_MS = 600;
@@ -41,9 +45,12 @@ export default function WorkspaceClient() {
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
   const [saveState, setSaveState] = useState("idle"); // idle | saving | saved
+  const [uploadingCount, setUploadingCount] = useState(0);
+  const [attachmentError, setAttachmentError] = useState("");
 
   const saveTimer = useRef(null);
   const skipNextRemoteSync = useRef(false);
+  const fileInputRef = useRef(null);
 
   useEffect(() => {
     if (!code || !isValidWorkspaceCode(code)) return;
@@ -116,6 +123,7 @@ export default function WorkspaceClient() {
       title: "無題のノート",
       content: "",
       pinned: false,
+      attachments: [],
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     });
@@ -123,9 +131,72 @@ export default function WorkspaceClient() {
   }
 
   async function handleDelete(noteId) {
-    if (!window.confirm("このノートを削除しますか？")) return;
+    if (!window.confirm("このノートを削除しますか？添付ファイルも削除されます。")) return;
+    const note = notes.find((n) => n.id === noteId);
+    // Best-effort cleanup: Storage files aren't automatically removed
+    // when a Firestore doc is deleted, so remove them explicitly.
+    // Failures here shouldn't block deleting the note itself.
+    if (note?.attachments?.length) {
+      await Promise.allSettled(note.attachments.map((a) => deleteObject(storageRef(storage, a.path))));
+    }
     await deleteDoc(doc(db, "workspaces", code, "notes", noteId));
     if (selectedId === noteId) setSelectedId(null);
+  }
+
+  async function handleFilesSelected(fileList) {
+    setAttachmentError("");
+    const files = Array.from(fileList || []);
+    if (!files.length || !selectedNote) return;
+
+    const currentCount = selectedNote.attachments?.length || 0;
+    if (currentCount + files.length > MAX_ATTACHMENTS_PER_NOTE) {
+      setAttachmentError(`添付ファイルは1ノートあたり最大${MAX_ATTACHMENTS_PER_NOTE}個までです。`);
+      return;
+    }
+
+    const oversized = files.find((f) => f.size > MAX_ATTACHMENT_SIZE);
+    if (oversized) {
+      setAttachmentError(`「${oversized.name}」は${formatFileSize(MAX_ATTACHMENT_SIZE)}を超えているため添付できません。`);
+      return;
+    }
+
+    setUploadingCount(files.length);
+    try {
+      for (const file of files) {
+        const path = attachmentStoragePath(code, selectedNote.id, file.name);
+        const fileRef = storageRef(storage, path);
+        await uploadBytes(fileRef, file, { contentType: file.type || "application/octet-stream" });
+        const url = await getDownloadURL(fileRef);
+        await updateDoc(doc(db, "workspaces", code, "notes", selectedNote.id), {
+          attachments: arrayUnion({
+            name: file.name,
+            path,
+            url,
+            size: file.size,
+            contentType: file.type || "application/octet-stream",
+          }),
+          updatedAt: serverTimestamp(),
+        });
+      }
+    } catch (err) {
+      setAttachmentError("アップロードに失敗しました。もう一度お試しください。");
+    } finally {
+      setUploadingCount(0);
+    }
+  }
+
+  async function handleRemoveAttachment(attachment) {
+    if (!selectedNote) return;
+    try {
+      await deleteObject(storageRef(storage, attachment.path));
+    } catch (err) {
+      // File may already be gone from Storage; still remove the
+      // reference from Firestore so the UI doesn't show a dead link.
+    }
+    await updateDoc(doc(db, "workspaces", code, "notes", selectedNote.id), {
+      attachments: arrayRemove(attachment),
+      updatedAt: serverTimestamp(),
+    });
   }
 
   async function togglePin(note) {
@@ -265,6 +336,7 @@ export default function WorkspaceClient() {
                   }}
                 >
                   {note.pinned && "📌 "}
+                  {note.attachments?.length > 0 && "📎 "}
                   {note.title || "無題のノート"}
                 </span>
               </div>
@@ -349,8 +421,33 @@ export default function WorkspaceClient() {
               />
               <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
                 <span style={{ fontSize: 12, color: "#a89685", minWidth: 50, textAlign: "right" }}>
-                  {saveState === "saving" ? "保存中…" : "保存済み"}
+                  {uploadingCount > 0 ? "アップロード中…" : saveState === "saving" ? "保存中…" : "保存済み"}
                 </span>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  multiple
+                  onChange={(e) => {
+                    handleFilesSelected(e.target.files);
+                    e.target.value = "";
+                  }}
+                  style={{ display: "none" }}
+                />
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  title="ファイルを添付"
+                  className="tap-target"
+                  disabled={uploadingCount > 0}
+                  style={{
+                    border: "1px solid rgba(44,24,16,0.15)",
+                    background: "transparent",
+                    borderRadius: 8,
+                    padding: "8px 12px",
+                    fontSize: 14,
+                  }}
+                >
+                  📎
+                </button>
                 <button
                   onClick={() => togglePin(selectedNote)}
                   title="ピン留め"
@@ -382,6 +479,73 @@ export default function WorkspaceClient() {
                 </button>
               </div>
             </div>
+            {(selectedNote.attachments?.length > 0 || attachmentError) && (
+              <div
+                style={{
+                  padding: "12px 20px",
+                  borderBottom: "1px solid rgba(44,24,16,0.08)",
+                  display: "flex",
+                  flexWrap: "wrap",
+                  gap: 8,
+                }}
+              >
+                {attachmentError && (
+                  <p role="alert" style={{ width: "100%", margin: 0, fontSize: 12, color: "#b3401f" }}>
+                    {attachmentError}
+                  </p>
+                )}
+                {selectedNote.attachments?.map((a) => (
+                  <div
+                    key={a.path}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 6,
+                      padding: "6px 8px",
+                      borderRadius: 8,
+                      background: "var(--cream)",
+                      border: "1px solid rgba(44,24,16,0.1)",
+                      fontSize: 12,
+                      maxWidth: "100%",
+                    }}
+                  >
+                    <span>{a.contentType?.startsWith("image/") ? "🖼️" : "📄"}</span>
+                    <a
+                      href={a.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{
+                        color: "var(--dark-brown)",
+                        textDecoration: "none",
+                        fontWeight: 600,
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                        maxWidth: 180,
+                      }}
+                    >
+                      {a.name}
+                    </a>
+                    <span style={{ color: "#a89685" }}>{formatFileSize(a.size)}</span>
+                    <button
+                      onClick={() => handleRemoveAttachment(a)}
+                      aria-label={`${a.name}を削除`}
+                      style={{
+                        border: "none",
+                        background: "transparent",
+                        color: "#a89685",
+                        cursor: "pointer",
+                        fontSize: 14,
+                        lineHeight: 1,
+                        padding: "0 2px",
+                      }}
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
             <textarea
               value={content}
               onChange={(e) => setContent(e.target.value)}

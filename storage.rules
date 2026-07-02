@@ -1,0 +1,21 @@
+rules_version = '2';
+
+// Same security model as firestore.rules: no Firebase Auth, access is
+// controlled purely by knowledge of the workspace code embedded in
+// the storage path. These rules validate file size and the code
+// format; they cannot verify the uploader actually "knows" the code
+// in any stronger sense, since the code is the path itself.
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /workspaces/{code}/attachments/{noteId}/{fileName} {
+      allow read: if true;
+
+      allow write: if code.matches('^[A-Z]+-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{6}$')
+                   // 10MB per file. Keep in sync with MAX_ATTACHMENT_SIZE
+                   // in app/workspace/[code]/WorkspaceClient.jsx.
+                   && request.resource.size < 10 * 1024 * 1024;
+
+      allow delete: if true;
+    }
+  }
+}

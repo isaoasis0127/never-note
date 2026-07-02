@@ -19,19 +19,23 @@ service cloud.firestore {
       match /notes/{noteId} {
         allow read: if true;
 
-        allow create: if request.resource.data.keys().hasAll(['title', 'content', 'pinned', 'createdAt', 'updatedAt'])
+        allow create: if request.resource.data.keys().hasAll(['title', 'content', 'pinned', 'attachments', 'createdAt', 'updatedAt'])
                       && request.resource.data.title is string
                       && request.resource.data.title.size() < 300
                       && request.resource.data.content is string
                       && request.resource.data.content.size() < 200000
-                      && request.resource.data.pinned is bool;
+                      && request.resource.data.pinned is bool
+                      && request.resource.data.attachments is list
+                      && request.resource.data.attachments.size() < 21;
 
         allow update: if request.resource.data.diff(resource.data).affectedKeys()
-                        .hasOnly(['title', 'content', 'pinned', 'updatedAt'])
+                        .hasOnly(['title', 'content', 'pinned', 'attachments', 'updatedAt'])
                       && (!('title' in request.resource.data) || request.resource.data.title is string)
                       && (!('title' in request.resource.data) || request.resource.data.title.size() < 300)
                       && (!('content' in request.resource.data) || request.resource.data.content is string)
-                      && (!('content' in request.resource.data) || request.resource.data.content.size() < 200000);
+                      && (!('content' in request.resource.data) || request.resource.data.content.size() < 200000)
+                      && (!('attachments' in request.resource.data) || request.resource.data.attachments is list)
+                      && (!('attachments' in request.resource.data) || request.resource.data.attachments.size() < 21);
 
         allow delete: if true;
       }
