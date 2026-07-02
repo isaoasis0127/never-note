@@ -235,17 +235,25 @@ export default function WorkspaceClient() {
             </p>
           )}
           {filtered.map((note) => (
-            <div
+            <button
               key={note.id}
+              type="button"
               onClick={() => setSelectedId(note.id)}
-              className="note-list-item"
+              className="note-list-item tap-target"
               style={{
+                display: "block",
+                width: "100%",
+                textAlign: "left",
                 padding: "12px 10px",
                 borderRadius: 8,
                 cursor: "pointer",
                 marginBottom: 2,
                 background: selectedId === note.id ? "var(--cream)" : "transparent",
                 border: selectedId === note.id ? "1px solid rgba(44,24,16,0.1)" : "1px solid transparent",
+                font: "inherit",
+                color: "inherit",
+                WebkitAppearance: "none",
+                appearance: "none",
               }}
             >
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6 }}>
@@ -274,7 +282,7 @@ export default function WorkspaceClient() {
               >
                 {(note.content || "内容なし").slice(0, 60)}
               </p>
-            </div>
+            </button>
           ))}
         </div>
 
