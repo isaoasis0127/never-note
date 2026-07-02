@@ -1,0 +1,40 @@
+rules_version = '2';
+
+// Security model: there is no Firebase Auth in this app. Access is
+// controlled entirely by knowledge of the workspace code (the
+// document ID under /workspaces). These rules validate data shape
+// and prevent obviously malformed writes; they cannot verify that a
+// client "knows" the code, since the code is the path itself. Treat
+// invite codes like a shared secret — anyone who has one can read
+// and write that workspace.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    match /workspaces/{code} {
+      allow read: if true;
+      allow create: if request.resource.data.keys().hasOnly(['createdAt'])
+                    && code.matches('^[A-Z]+-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{6}$');
+      allow update, delete: if false;
+
+      match /notes/{noteId} {
+        allow read: if true;
+
+        allow create: if request.resource.data.keys().hasAll(['title', 'content', 'pinned', 'createdAt', 'updatedAt'])
+                      && request.resource.data.title is string
+                      && request.resource.data.title.size() < 300
+                      && request.resource.data.content is string
+                      && request.resource.data.content.size() < 200000
+                      && request.resource.data.pinned is bool;
+
+        allow update: if request.resource.data.diff(resource.data).affectedKeys()
+                        .hasOnly(['title', 'content', 'pinned', 'updatedAt'])
+                      && (!('title' in request.resource.data) || request.resource.data.title is string)
+                      && (!('title' in request.resource.data) || request.resource.data.title.size() < 300)
+                      && (!('content' in request.resource.data) || request.resource.data.content is string)
+                      && (!('content' in request.resource.data) || request.resource.data.content.size() < 200000);
+
+        allow delete: if true;
+      }
+    }
+  }
+}

@@ -1,0 +1,19 @@
+[build]
+  command = "npm run build"
+  publish = "out"
+
+# Static export can't pre-render every possible workspace code at
+# build time, so every /workspace/<code> path is rewritten to the
+# same pre-built shell. The page then reads the real code from the
+# browser URL on the client (see app/workspace/[code]/page.jsx).
+[[redirects]]
+  from = "/workspace/*"
+  to = "/workspace/_/index.html"
+  status = 200
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"

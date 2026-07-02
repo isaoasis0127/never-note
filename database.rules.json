@@ -1,0 +1,13 @@
+{
+  "rules": {
+    "presence": {
+      "$code": {
+        "$sessionId": {
+          ".read": true,
+          ".write": true,
+          ".validate": "newData.hasChildren(['online', 'ts'])"
+        }
+      }
+    }
+  }
+}

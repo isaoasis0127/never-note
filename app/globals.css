@@ -1,0 +1,136 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap");
+
+:root {
+  --amber: #e8a020;
+  --dark-brown: #2c1810;
+  --yellow: #f5c842;
+  --burnt-orange: #c8860a;
+  --cream: #fffdf5;
+
+  --font-heading: Georgia, "Times New Roman", serif;
+  --font-body: "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
+
+  --radius: 10px;
+  --shadow-soft: 0 2px 10px rgba(44, 24, 16, 0.06);
+  --shadow-lift: 0 8px 24px rgba(44, 24, 16, 0.12);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  padding: 0;
+  margin: 0;
+  background: var(--cream);
+  color: var(--dark-brown);
+  font-family: var(--font-body);
+}
+
+body {
+  min-height: 100vh;
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--font-heading);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+a {
+  color: inherit;
+}
+
+button {
+  font-family: var(--font-body);
+  cursor: pointer;
+}
+
+/* Signature motif: an irregular giraffe-spot pattern used sparingly
+   as a background texture, echoing the logo without competing with
+   content. Reused on the landing hero and the empty-note state. */
+.spot-field {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  z-index: 0;
+}
+
+.spot {
+  position: absolute;
+  background: var(--amber);
+  opacity: 0.08;
+  border-radius: 40% 60% 55% 45% / 50% 45% 55% 50%;
+}
+
+::selection {
+  background: var(--yellow);
+  color: var(--dark-brown);
+}
+
+:focus-visible {
+  outline: 2px solid var(--burnt-orange);
+  outline-offset: 2px;
+}
+
+/* The note-editor screen shows a fixed sidebar + main pane on wide
+   viewports. Below the breakpoint there isn't room for both, so it
+   becomes a single pane that swaps between the note list and the
+   open note, driven by data-mobile-view on the shell (see
+   WorkspaceClient.jsx: "list" when no note is selected, "note"
+   once one is). The back button only exists to return from that
+   single-pane note view, so it's hidden entirely above the
+   breakpoint. */
+.mobile-back-button {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .workspace-shell {
+    flex-direction: column;
+  }
+
+  .workspace-sidebar {
+    width: 100% !important;
+    border-right: none !important;
+    border-bottom: 1px solid rgba(44, 24, 16, 0.1);
+  }
+
+  .workspace-sidebar,
+  .workspace-main {
+    min-height: 100vh;
+  }
+
+  .workspace-shell[data-mobile-view="list"] .workspace-main {
+    display: none;
+  }
+
+  .workspace-shell[data-mobile-view="note"] .workspace-sidebar {
+    display: none;
+  }
+
+  .mobile-back-button {
+    display: inline-flex;
+  }
+}
+
+/* Comfortable touch targets (44px is the common iOS/Android
+   minimum) without changing sizing on pointer/mouse input. */
+@media (pointer: coarse) {
+  .tap-target,
+  .note-list-item {
+    min-height: 44px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
