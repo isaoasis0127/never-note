@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { doc, setDoc, getDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { generateWorkspaceCode, isValidWorkspaceCode, normalizeWorkspaceCode } from "@/lib/workspaceCode";
+import { getRecentWorkspaces, addRecentWorkspace, clearRecentWorkspaces } from "@/lib/recentWorkspaces";
 import GiraffeLogo from "@/components/GiraffeLogo";
 
 export default function HomePage() {
@@ -16,6 +17,11 @@ export default function HomePage() {
   const [error, setError] = useState("");
   const [failedAttempts, setFailedAttempts] = useState(0);
   const [lockedUntil, setLockedUntil] = useState(0);
+  const [recentWorkspaces, setRecentWorkspaces] = useState([]);
+
+  useEffect(() => {
+    setRecentWorkspaces(getRecentWorkspaces());
+  }, []);
 
   async function handleCreate() {
     setBusy(true);
@@ -31,6 +37,7 @@ export default function HomePage() {
       await setDoc(doc(db, "workspaces", code), {
         createdAt: serverTimestamp(),
       });
+      addRecentWorkspace(code);
       router.push(`/workspace/${code}/`);
     } catch (err) {
       setError("ワークスペースを作成できませんでした。もう一度お試しください。");
@@ -38,16 +45,14 @@ export default function HomePage() {
     }
   }
 
-  async function handleJoin(e) {
-    e.preventDefault();
-
+  async function attemptJoin(rawCode) {
     const remainingLockMs = lockedUntil - Date.now();
     if (remainingLockMs > 0) {
       setError(`試行回数が多いため、あと${Math.ceil(remainingLockMs / 1000)}秒お待ちください。`);
       return;
     }
 
-    const code = normalizeWorkspaceCode(joinCode);
+    const code = normalizeWorkspaceCode(rawCode);
     if (!isValidWorkspaceCode(code)) {
       setError("招待コードの形式が正しくありません（例: GIRAFFE-K7XQ9P）");
       return;
@@ -73,11 +78,29 @@ export default function HomePage() {
         return;
       }
       setFailedAttempts(0);
+      addRecentWorkspace(code);
       router.push(`/workspace/${code}/`);
     } catch (err) {
       setError("接続できませんでした。もう一度お試しください。");
       setBusy(false);
     }
+  }
+
+  function handleJoin(e) {
+    e.preventDefault();
+    attemptJoin(joinCode);
+  }
+
+  function handleSelectRecent(e) {
+    const code = e.target.value;
+    if (!code) return;
+    setJoinCode(code);
+    attemptJoin(code);
+  }
+
+  function handleClearRecent() {
+    clearRecentWorkspaces();
+    setRecentWorkspaces([]);
   }
 
   return (
@@ -152,6 +175,55 @@ export default function HomePage() {
           </div>
         ) : (
           <form onSubmit={handleJoin}>
+            {recentWorkspaces.length > 0 && (
+              <div style={{ marginBottom: 16 }}>
+                <label htmlFor="recent" style={{ fontSize: 13, fontWeight: 600, color: "#5a4a3c" }}>
+                  最近参加したワークスペース
+                </label>
+                <select
+                  id="recent"
+                  onChange={handleSelectRecent}
+                  value=""
+                  disabled={busy}
+                  style={{ ...inputStyle, marginBottom: 4 }}
+                >
+                  <option value="">選択してください</option>
+                  {recentWorkspaces.map((code) => (
+                    <option key={code} value={code}>
+                      {code}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={handleClearRecent}
+                  style={{
+                    border: "none",
+                    background: "transparent",
+                    color: "#a89685",
+                    fontSize: 12,
+                    textDecoration: "underline",
+                    padding: 0,
+                  }}
+                >
+                  履歴をクリア
+                </button>
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 10,
+                    margin: "14px 0",
+                    color: "#c4b8ab",
+                    fontSize: 12,
+                  }}
+                >
+                  <span style={{ flex: 1, height: 1, background: "rgba(44,24,16,0.1)" }} />
+                  または
+                  <span style={{ flex: 1, height: 1, background: "rgba(44,24,16,0.1)" }} />
+                </div>
+              </div>
+            )}
             <label htmlFor="code" style={{ fontSize: 13, fontWeight: 600, color: "#5a4a3c" }}>
               招待コード
             </label>
