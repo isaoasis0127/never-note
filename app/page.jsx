@@ -6,7 +6,14 @@ import Link from "next/link";
 import { doc, setDoc, getDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { generateWorkspaceCode, isValidWorkspaceCode, normalizeWorkspaceCode } from "@/lib/workspaceCode";
-import { getRecentWorkspaces, addRecentWorkspace, clearRecentWorkspaces } from "@/lib/recentWorkspaces";
+import {
+  getRecentWorkspaces,
+  addRecentWorkspace,
+  renameRecentWorkspace,
+  removeRecentWorkspace,
+  clearRecentWorkspaces,
+  MAX_LABEL_LENGTH,
+} from "@/lib/recentWorkspaces";
 import GiraffeLogo from "@/components/GiraffeLogo";
 
 export default function HomePage() {
@@ -18,6 +25,8 @@ export default function HomePage() {
   const [failedAttempts, setFailedAttempts] = useState(0);
   const [lockedUntil, setLockedUntil] = useState(0);
   const [recentWorkspaces, setRecentWorkspaces] = useState([]);
+  const [editingCode, setEditingCode] = useState(null);
+  const [editingLabelValue, setEditingLabelValue] = useState("");
 
   useEffect(() => {
     setRecentWorkspaces(getRecentWorkspaces());
@@ -91,16 +100,31 @@ export default function HomePage() {
     attemptJoin(joinCode);
   }
 
-  function handleSelectRecent(e) {
-    const code = e.target.value;
-    if (!code) return;
-    setJoinCode(code);
-    attemptJoin(code);
-  }
-
   function handleClearRecent() {
     clearRecentWorkspaces();
     setRecentWorkspaces([]);
+  }
+
+  function handleRemoveRecent(code) {
+    removeRecentWorkspace(code);
+    setRecentWorkspaces(getRecentWorkspaces());
+  }
+
+  function startEditingLabel(entry) {
+    setEditingCode(entry.code);
+    setEditingLabelValue(entry.label || "");
+  }
+
+  function cancelEditingLabel() {
+    setEditingCode(null);
+    setEditingLabelValue("");
+  }
+
+  function saveEditingLabel() {
+    renameRecentWorkspace(editingCode, editingLabelValue);
+    setRecentWorkspaces(getRecentWorkspaces());
+    setEditingCode(null);
+    setEditingLabelValue("");
   }
 
   return (
@@ -177,37 +201,131 @@ export default function HomePage() {
           <form onSubmit={handleJoin}>
             {recentWorkspaces.length > 0 && (
               <div style={{ marginBottom: 16 }}>
-                <label htmlFor="recent" style={{ fontSize: 13, fontWeight: 600, color: "#5a4a3c" }}>
-                  最近参加したワークスペース
-                </label>
-                <select
-                  id="recent"
-                  onChange={handleSelectRecent}
-                  value=""
-                  disabled={busy}
-                  style={{ ...inputStyle, marginBottom: 4 }}
-                >
-                  <option value="">選択してください</option>
-                  {recentWorkspaces.map((code) => (
-                    <option key={code} value={code}>
-                      {code}
-                    </option>
-                  ))}
-                </select>
-                <button
-                  type="button"
-                  onClick={handleClearRecent}
+                <div
                   style={{
-                    border: "none",
-                    background: "transparent",
-                    color: "#a89685",
-                    fontSize: 12,
-                    textDecoration: "underline",
-                    padding: 0,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    marginBottom: 6,
                   }}
                 >
-                  履歴をクリア
-                </button>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: "#5a4a3c" }}>
+                    最近参加したワークスペース
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleClearRecent}
+                    style={{
+                      border: "none",
+                      background: "transparent",
+                      color: "#a89685",
+                      fontSize: 12,
+                      textDecoration: "underline",
+                      padding: 0,
+                    }}
+                  >
+                    すべて削除
+                  </button>
+                </div>
+
+                <div style={{ maxHeight: 260, overflowY: "auto", marginBottom: 4 }}>
+                  {recentWorkspaces.map((entry) => (
+                    <div
+                      key={entry.code}
+                      style={{
+                        border: "1px solid rgba(44,24,16,0.12)",
+                        borderRadius: 8,
+                        marginBottom: 6,
+                        background: "#fff",
+                      }}
+                    >
+                      {editingCode === entry.code ? (
+                        <div style={{ display: "flex", gap: 6, padding: 8 }}>
+                          <input
+                            autoFocus
+                            value={editingLabelValue}
+                            onChange={(e) => setEditingLabelValue(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") saveEditingLabel();
+                              if (e.key === "Escape") cancelEditingLabel();
+                            }}
+                            placeholder={entry.code}
+                            maxLength={MAX_LABEL_LENGTH}
+                            style={{
+                              flex: 1,
+                              minWidth: 0,
+                              fontSize: 14,
+                              border: "1px solid rgba(44,24,16,0.2)",
+                              borderRadius: 6,
+                              padding: "8px 10px",
+                              fontFamily: "var(--font-body)",
+                            }}
+                          />
+                          <button type="button" onClick={saveEditingLabel} className="tap-target" style={iconButtonStyle} aria-label="保存">
+                            ✓
+                          </button>
+                          <button type="button" onClick={cancelEditingLabel} className="tap-target" style={iconButtonStyle} aria-label="キャンセル">
+                            ×
+                          </button>
+                        </div>
+                      ) : (
+                        <div style={{ display: "flex", alignItems: "center" }}>
+                          <button
+                            type="button"
+                            onClick={() => attemptJoin(entry.code)}
+                            disabled={busy}
+                            className="tap-target"
+                            style={{
+                              flex: 1,
+                              minWidth: 0,
+                              textAlign: "left",
+                              border: "none",
+                              background: "transparent",
+                              padding: "10px 10px",
+                              WebkitAppearance: "none",
+                              appearance: "none",
+                            }}
+                          >
+                            <div
+                              style={{
+                                fontSize: 14,
+                                fontWeight: 600,
+                                color: "var(--dark-brown)",
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                                whiteSpace: "nowrap",
+                              }}
+                            >
+                              {entry.label || entry.code}
+                            </div>
+                            {entry.label && (
+                              <div style={{ fontSize: 11, color: "#a89685", marginTop: 1 }}>{entry.code}</div>
+                            )}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => startEditingLabel(entry)}
+                            className="tap-target"
+                            style={iconButtonStyle}
+                            aria-label={`${entry.code}の名前を編集`}
+                          >
+                            ✎
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveRecent(entry.code)}
+                            className="tap-target"
+                            style={{ ...iconButtonStyle, color: "#a89685" }}
+                            aria-label={`${entry.code}を履歴から削除`}
+                          >
+                            ×
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+
                 <div
                   style={{
                     display: "flex",
@@ -313,4 +431,15 @@ const inputStyle = {
   fontSize: 16,
   fontFamily: "var(--font-body)",
   letterSpacing: "0.02em",
+};
+
+const iconButtonStyle = {
+  flexShrink: 0,
+  border: "none",
+  background: "transparent",
+  color: "#5a4a3c",
+  fontSize: 14,
+  padding: "10px 12px",
+  WebkitAppearance: "none",
+  appearance: "none",
 };
