@@ -4,8 +4,11 @@
 
 # Static export can't pre-render every possible workspace code at
 # build time, so every /workspace/<code> path is rewritten to the
-# same pre-built shell. The page then reads the real code from the
-# browser URL on the client (see app/workspace/[code]/page.jsx).
+# same pre-built shell. The page then reads the real code (and any
+# query string, e.g. ?open=<noteId> used by cross-workspace note
+# links) from the browser URL on the client — Netlify passes the
+# original query string through on this kind of rewrite unchanged.
+# See app/workspace/[code]/page.jsx and WorkspaceClient.jsx.
 [[redirects]]
   from = "/workspace/*"
   to = "/workspace/_/index.html"

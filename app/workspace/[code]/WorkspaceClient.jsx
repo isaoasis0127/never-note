@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   collection,
   doc,
+  getDoc,
   onSnapshot,
   orderBy,
   query,
@@ -21,14 +22,25 @@ import { ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from "fi
 import { db, rtdb, storage } from "@/lib/firebase";
 import { isValidWorkspaceCode } from "@/lib/workspaceCode";
 import { MAX_ATTACHMENT_SIZE, MAX_ATTACHMENTS_PER_NOTE, formatFileSize, attachmentStoragePath } from "@/lib/attachments";
-import { makeNoteLink, extractLinkedNoteIds, findBacklinks } from "@/lib/noteLinks";
+import { makeNoteLink, extractLinkTokens, findBacklinks } from "@/lib/noteLinks";
 import GiraffeLogo from "@/components/GiraffeLogo";
 
 const AUTOSAVE_DELAY_MS = 600;
 
+const linkChipStyle = {
+  border: "1px solid rgba(44,24,16,0.15)",
+  background: "var(--cream)",
+  borderRadius: 6,
+  padding: "4px 10px",
+  fontSize: 12,
+  color: "var(--dark-brown)",
+  fontWeight: 600,
+};
+
 export default function WorkspaceClient() {
   const pathname = usePathname();
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   // The prebuilt static page is served for every /workspace/<code>
   // URL (see netlify.toml), so the real code is read from the
@@ -49,10 +61,12 @@ export default function WorkspaceClient() {
   const [uploadingCount, setUploadingCount] = useState(0);
   const [attachmentError, setAttachmentError] = useState("");
   const [linkCopied, setLinkCopied] = useState(false);
+  const [crossWorkspaceTitles, setCrossWorkspaceTitles] = useState({});
 
   const saveTimer = useRef(null);
   const skipNextRemoteSync = useRef(false);
   const fileInputRef = useRef(null);
+  const autoOpenedRef = useRef(false);
 
   useEffect(() => {
     if (!code || !isValidWorkspaceCode(code)) return;
@@ -66,6 +80,19 @@ export default function WorkspaceClient() {
 
     return () => unsubscribe();
   }, [code]);
+
+  // Cross-workspace links navigate here with ?open=<noteId>. Once the
+  // notes list has loaded, select that note automatically (only once
+  // per page load, so switching notes afterward doesn't keep
+  // re-triggering this from a stale query param).
+  useEffect(() => {
+    if (autoOpenedRef.current || loading) return;
+    const openId = searchParams.get("open");
+    if (openId && notes.some((n) => n.id === openId)) {
+      setSelectedId(openId);
+      autoOpenedRef.current = true;
+    }
+  }, [loading, notes, searchParams]);
 
   // Presence: register this tab, remove it automatically on
   // disconnect, and count everyone currently registered.
@@ -92,16 +119,50 @@ export default function WorkspaceClient() {
 
   const selectedNote = notes.find((n) => n.id === selectedId) || null;
 
-  const outgoingLinks = useMemo(() => {
+  const outgoingTokens = useMemo(() => {
     if (!selectedId) return [];
-    const ids = extractLinkedNoteIds(content);
-    return ids.map((id) => notes.find((n) => n.id === id)).filter((n) => n && n.id !== selectedId);
-  }, [content, notes, selectedId]);
+    return extractLinkTokens(content).filter((t) => {
+      const isSameWorkspace = t.code === null || t.code === code;
+      return !(isSameWorkspace && t.noteId === selectedId); // exclude self-links
+    });
+  }, [content, selectedId, code]);
+
+  const sameWorkspaceOutgoing = useMemo(
+    () =>
+      outgoingTokens
+        .filter((t) => t.code === null || t.code === code)
+        .map((t) => notes.find((n) => n.id === t.noteId))
+        .filter(Boolean),
+    [outgoingTokens, notes, code]
+  );
+
+  const crossWorkspaceOutgoing = useMemo(() => outgoingTokens.filter((t) => t.code && t.code !== code), [outgoingTokens]);
+
+  // Cross-workspace link targets live in a workspace we haven't
+  // loaded, so their titles have to be fetched individually rather
+  // than looked up in the local `notes` array.
+  useEffect(() => {
+    crossWorkspaceOutgoing.forEach(async (t) => {
+      const key = `${t.code}:${t.noteId}`;
+      if (key in crossWorkspaceTitles) return;
+      setCrossWorkspaceTitles((prev) => ({ ...prev, [key]: "loading" }));
+      try {
+        const snap = await getDoc(doc(db, "workspaces", t.code, "notes", t.noteId));
+        setCrossWorkspaceTitles((prev) => ({
+          ...prev,
+          [key]: snap.exists() ? snap.data().title || "無題のノート" : null,
+        }));
+      } catch {
+        setCrossWorkspaceTitles((prev) => ({ ...prev, [key]: null }));
+      }
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [crossWorkspaceOutgoing]);
 
   const backlinks = useMemo(() => {
     if (!selectedId) return [];
-    return findBacklinks(notes, selectedId);
-  }, [notes, selectedId]);
+    return findBacklinks(notes, code, selectedId);
+  }, [notes, selectedId, code]);
 
   useEffect(() => {
     if (skipNextRemoteSync.current) {
@@ -220,11 +281,11 @@ export default function WorkspaceClient() {
 
   async function handleCopyLink(note) {
     try {
-      await navigator.clipboard.writeText(makeNoteLink(note.id));
+      await navigator.clipboard.writeText(makeNoteLink(code, note.id));
       setLinkCopied(true);
       setTimeout(() => setLinkCopied(false), 1500);
     } catch (err) {
-      window.prompt("コピーできませんでした。以下を手動でコピーしてください:", makeNoteLink(note.id));
+      window.prompt("コピーできませんでした。以下を手動でコピーしてください:", makeNoteLink(code, note.id));
     }
   }
 
@@ -584,7 +645,7 @@ export default function WorkspaceClient() {
                 ))}
               </div>
             )}
-            {(outgoingLinks.length > 0 || backlinks.length > 0) && (
+            {(sameWorkspaceOutgoing.length > 0 || crossWorkspaceOutgoing.length > 0 || backlinks.length > 0) && (
               <div
                 style={{
                   padding: "12px 20px",
@@ -594,27 +655,37 @@ export default function WorkspaceClient() {
                   gap: 8,
                 }}
               >
-                {outgoingLinks.length > 0 && (
+                {(sameWorkspaceOutgoing.length > 0 || crossWorkspaceOutgoing.length > 0) && (
                   <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6 }}>
                     <span style={{ fontSize: 11, color: "#a89685", marginRight: 2 }}>🔗 リンク先:</span>
-                    {outgoingLinks.map((n) => (
+                    {sameWorkspaceOutgoing.map((n) => (
                       <button
                         key={n.id}
                         onClick={() => setSelectedId(n.id)}
                         className="tap-target"
-                        style={{
-                          border: "1px solid rgba(44,24,16,0.15)",
-                          background: "var(--cream)",
-                          borderRadius: 6,
-                          padding: "4px 10px",
-                          fontSize: 12,
-                          color: "var(--dark-brown)",
-                          fontWeight: 600,
-                        }}
+                        style={linkChipStyle}
                       >
                         {n.title || "無題のノート"}
                       </button>
                     ))}
+                    {crossWorkspaceOutgoing.map((t) => {
+                      const key = `${t.code}:${t.noteId}`;
+                      const titleState = crossWorkspaceTitles[key];
+                      if (titleState === null) return null; // not found — skip silently
+                      const label = titleState && titleState !== "loading" ? titleState : "読み込み中…";
+                      return (
+                        <button
+                          key={key}
+                          onClick={() => router.push(`/workspace/${t.code}/?open=${t.noteId}`)}
+                          className="tap-target"
+                          title={`別のワークスペース（${t.code}）のノートへ移動`}
+                          style={linkChipStyle}
+                        >
+                          {label}
+                          <span style={{ color: "#a89685", fontWeight: 400 }}> ↗ {t.code}</span>
+                        </button>
+                      );
+                    })}
                   </div>
                 )}
                 {backlinks.length > 0 && (
@@ -625,15 +696,7 @@ export default function WorkspaceClient() {
                         key={n.id}
                         onClick={() => setSelectedId(n.id)}
                         className="tap-target"
-                        style={{
-                          border: "1px solid rgba(44,24,16,0.15)",
-                          background: "var(--cream)",
-                          borderRadius: 6,
-                          padding: "4px 10px",
-                          fontSize: 12,
-                          color: "var(--dark-brown)",
-                          fontWeight: 600,
-                        }}
+                        style={linkChipStyle}
                       >
                         {n.title || "無題のノート"}
                       </button>

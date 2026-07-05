@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import WorkspaceClient from "./WorkspaceClient";
 
 // Workspace pages are private (gated only by knowledge of the invite
@@ -19,5 +20,12 @@ export async function generateStaticParams() {
 export const dynamicParams = false;
 
 export default function WorkspacePage() {
-  return <WorkspaceClient />;
+  // WorkspaceClient reads ?open=<noteId> via useSearchParams (used
+  // for cross-workspace note links), which Next.js requires to be
+  // wrapped in Suspense during static export.
+  return (
+    <Suspense fallback={null}>
+      <WorkspaceClient />
+    </Suspense>
+  );
 }
