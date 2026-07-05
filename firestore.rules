@@ -11,7 +11,16 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     match /workspaces/{code} {
-      allow read: if true;
+      // Split get/list rather than a blanket "read": the app only
+      // ever fetches a workspace by its exact code (getDoc), which is
+      // a "get". It never queries the collection broadly. Allowing
+      // "list" here would let anyone enumerate every workspace code
+      // that exists — without knowing any of them — which both
+      // defeats the whole invite-code security model and generates
+      // one billed Firestore read per document returned, making a
+      // trivial scan into a real cost (and privacy) exposure.
+      allow get: if true;
+      allow list: if false;
       allow create: if request.resource.data.keys().hasOnly(['createdAt'])
                     && code.matches('^[A-Z]+-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{6}$');
       allow update, delete: if false;
