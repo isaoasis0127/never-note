@@ -21,6 +21,7 @@ import { ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from "fi
 import { db, rtdb, storage } from "@/lib/firebase";
 import { isValidWorkspaceCode } from "@/lib/workspaceCode";
 import { MAX_ATTACHMENT_SIZE, MAX_ATTACHMENTS_PER_NOTE, formatFileSize, attachmentStoragePath } from "@/lib/attachments";
+import { makeNoteLink, extractLinkedNoteIds, findBacklinks } from "@/lib/noteLinks";
 import GiraffeLogo from "@/components/GiraffeLogo";
 
 const AUTOSAVE_DELAY_MS = 600;
@@ -47,6 +48,7 @@ export default function WorkspaceClient() {
   const [saveState, setSaveState] = useState("idle"); // idle | saving | saved
   const [uploadingCount, setUploadingCount] = useState(0);
   const [attachmentError, setAttachmentError] = useState("");
+  const [linkCopied, setLinkCopied] = useState(false);
 
   const saveTimer = useRef(null);
   const skipNextRemoteSync = useRef(false);
@@ -89,6 +91,17 @@ export default function WorkspaceClient() {
   }, [code]);
 
   const selectedNote = notes.find((n) => n.id === selectedId) || null;
+
+  const outgoingLinks = useMemo(() => {
+    if (!selectedId) return [];
+    const ids = extractLinkedNoteIds(content);
+    return ids.map((id) => notes.find((n) => n.id === id)).filter((n) => n && n.id !== selectedId);
+  }, [content, notes, selectedId]);
+
+  const backlinks = useMemo(() => {
+    if (!selectedId) return [];
+    return findBacklinks(notes, selectedId);
+  }, [notes, selectedId]);
 
   useEffect(() => {
     if (skipNextRemoteSync.current) {
@@ -203,6 +216,16 @@ export default function WorkspaceClient() {
     await updateDoc(doc(db, "workspaces", code, "notes", note.id), {
       pinned: !note.pinned,
     });
+  }
+
+  async function handleCopyLink(note) {
+    try {
+      await navigator.clipboard.writeText(makeNoteLink(note.id));
+      setLinkCopied(true);
+      setTimeout(() => setLinkCopied(false), 1500);
+    } catch (err) {
+      window.prompt("コピーできませんでした。以下を手動でコピーしてください:", makeNoteLink(note.id));
+    }
   }
 
   function handleLeave() {
@@ -449,6 +472,21 @@ export default function WorkspaceClient() {
                   📎
                 </button>
                 <button
+                  onClick={() => handleCopyLink(selectedNote)}
+                  title="このノートへのリンクをコピー"
+                  className="tap-target"
+                  style={{
+                    border: "1px solid rgba(44,24,16,0.15)",
+                    background: linkCopied ? "var(--yellow)" : "transparent",
+                    borderRadius: 8,
+                    padding: "8px 12px",
+                    fontSize: 14,
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {linkCopied ? "コピーしました" : "🔗"}
+                </button>
+                <button
                   onClick={() => togglePin(selectedNote)}
                   title="ピン留め"
                   className="tap-target"
@@ -544,6 +582,64 @@ export default function WorkspaceClient() {
                     </button>
                   </div>
                 ))}
+              </div>
+            )}
+            {(outgoingLinks.length > 0 || backlinks.length > 0) && (
+              <div
+                style={{
+                  padding: "12px 20px",
+                  borderBottom: "1px solid rgba(44,24,16,0.08)",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 8,
+                }}
+              >
+                {outgoingLinks.length > 0 && (
+                  <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6 }}>
+                    <span style={{ fontSize: 11, color: "#a89685", marginRight: 2 }}>🔗 リンク先:</span>
+                    {outgoingLinks.map((n) => (
+                      <button
+                        key={n.id}
+                        onClick={() => setSelectedId(n.id)}
+                        className="tap-target"
+                        style={{
+                          border: "1px solid rgba(44,24,16,0.15)",
+                          background: "var(--cream)",
+                          borderRadius: 6,
+                          padding: "4px 10px",
+                          fontSize: 12,
+                          color: "var(--dark-brown)",
+                          fontWeight: 600,
+                        }}
+                      >
+                        {n.title || "無題のノート"}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {backlinks.length > 0 && (
+                  <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6 }}>
+                    <span style={{ fontSize: 11, color: "#a89685", marginRight: 2 }}>🔗 リンク元:</span>
+                    {backlinks.map((n) => (
+                      <button
+                        key={n.id}
+                        onClick={() => setSelectedId(n.id)}
+                        className="tap-target"
+                        style={{
+                          border: "1px solid rgba(44,24,16,0.15)",
+                          background: "var(--cream)",
+                          borderRadius: 6,
+                          padding: "4px 10px",
+                          fontSize: 12,
+                          color: "var(--dark-brown)",
+                          fontWeight: 600,
+                        }}
+                      >
+                        {n.title || "無題のノート"}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
             <textarea
