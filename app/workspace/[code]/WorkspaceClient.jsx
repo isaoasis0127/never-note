@@ -61,6 +61,7 @@ export default function WorkspaceClient() {
   const [uploadingCount, setUploadingCount] = useState(0);
   const [attachmentError, setAttachmentError] = useState("");
   const [linkCopied, setLinkCopied] = useState(false);
+  const [shareUrlCopied, setShareUrlCopied] = useState(false);
   const [crossWorkspaceTitles, setCrossWorkspaceTitles] = useState({});
 
   const saveTimer = useRef(null);
@@ -286,6 +287,21 @@ export default function WorkspaceClient() {
       setTimeout(() => setLinkCopied(false), 1500);
     } catch (err) {
       window.prompt("コピーできませんでした。以下を手動でコピーしてください:", makeNoteLink(code, note.id));
+    }
+  }
+
+  async function handleCopyShareUrl(note) {
+    // This URL opens the whole workspace (the code is embedded in the
+    // path) and auto-selects this note — there is no per-note access
+    // control in this app, so sharing it hands over the same access
+    // as the invite code itself. See README "ノート間リンクの仕組み".
+    const url = `${window.location.origin}/workspace/${code}/?open=${note.id}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      setShareUrlCopied(true);
+      setTimeout(() => setShareUrlCopied(false), 1500);
+    } catch (err) {
+      window.prompt("コピーできませんでした。以下を手動でコピーしてください:", url);
     }
   }
 
@@ -534,7 +550,7 @@ export default function WorkspaceClient() {
                 </button>
                 <button
                   onClick={() => handleCopyLink(selectedNote)}
-                  title="このノートへのリンクをコピー"
+                  title="このノートへのリンクをコピー（他のノートに貼ると相互リンクされます）"
                   className="tap-target"
                   style={{
                     border: "1px solid rgba(44,24,16,0.15)",
@@ -546,6 +562,21 @@ export default function WorkspaceClient() {
                   }}
                 >
                   {linkCopied ? "コピーしました" : "🔗"}
+                </button>
+                <button
+                  onClick={() => handleCopyShareUrl(selectedNote)}
+                  title="共有用URLをコピー（このワークスペース全体にアクセスできるリンクです）"
+                  className="tap-target"
+                  style={{
+                    border: "1px solid rgba(44,24,16,0.15)",
+                    background: shareUrlCopied ? "var(--yellow)" : "transparent",
+                    borderRadius: 8,
+                    padding: "8px 12px",
+                    fontSize: 14,
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {shareUrlCopied ? "コピーしました" : "📤"}
                 </button>
                 <button
                   onClick={() => togglePin(selectedNote)}
