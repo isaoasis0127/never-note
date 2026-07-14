@@ -66,6 +66,7 @@ export default function WorkspaceClient() {
 
   const saveTimer = useRef(null);
   const skipNextRemoteSync = useRef(false);
+  const isProgrammaticChange = useRef(false);
   const fileInputRef = useRef(null);
   const autoOpenedRef = useRef(false);
 
@@ -165,19 +166,52 @@ export default function WorkspaceClient() {
     return findBacklinks(notes, code, selectedId);
   }, [notes, selectedId, code]);
 
+  // Switching notes should ALWAYS load the newly selected note's
+  // content immediately — it must never be blocked by
+  // skipNextRemoteSync, which exists only to suppress the echo of
+  // our own save arriving back through onSnapshot while the user
+  // stays on the SAME note. Conflating the two (as a single effect
+  // keyed on selectedId + title + content used to do) caused an
+  // intermittent bug: if you switched notes right as your own
+  // pending autosave for the previous note landed, the skip flag
+  // would eat the sync meant for the new note, leaving the editor
+  // showing stale content.
   useEffect(() => {
+    if (!selectedNote) return;
+    isProgrammaticChange.current = true;
+    setTitle(selectedNote.title || "");
+    setContent(selectedNote.content || "");
+    skipNextRemoteSync.current = false;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedId]);
+
+  // Same note, but its Firestore data changed — either someone else
+  // edited it, or it's the echo of our own save. Skip exactly one
+  // such sync right after we write, so it doesn't clobber whatever
+  // the user has typed since.
+  useEffect(() => {
+    if (!selectedId || !selectedNote) return;
     if (skipNextRemoteSync.current) {
       skipNextRemoteSync.current = false;
       return;
     }
-    if (selectedNote) {
-      setTitle(selectedNote.title || "");
-      setContent(selectedNote.content || "");
-    }
-  }, [selectedId, selectedNote?.title, selectedNote?.content]);
+    isProgrammaticChange.current = true;
+    setTitle(selectedNote.title || "");
+    setContent(selectedNote.content || "");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedNote?.title, selectedNote?.content]);
 
   useEffect(() => {
     if (!selectedId) return;
+    // title/content just changed because we programmatically loaded
+    // a note (switch, or a remote update syncing in) rather than the
+    // user typing — don't treat that as an edit to autosave. This
+    // used to fire on every note switch, causing a spurious "saving"
+    // flicker and an unnecessary Firestore write each time.
+    if (isProgrammaticChange.current) {
+      isProgrammaticChange.current = false;
+      return;
+    }
     setSaveState("saving");
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(async () => {
