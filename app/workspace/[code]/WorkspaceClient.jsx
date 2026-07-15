@@ -294,6 +294,24 @@ export default function WorkspaceClient() {
     }
   }
 
+  // Lets people paste a screenshot (or any copied image) directly
+  // into the note body instead of going through the file picker.
+  // The image still isn't rendered mid-text (that would need a rich
+  // text editor instead of a plain <textarea>) — it's uploaded as an
+  // attachment and shown as a thumbnail with the others.
+  function handleTextareaPaste(e) {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    const imageItem = Array.from(items).find((item) => item.type.startsWith("image/"));
+    if (!imageItem) return; // no image on the clipboard — let normal text paste happen
+    const blob = imageItem.getAsFile();
+    if (!blob) return;
+    e.preventDefault();
+    const ext = imageItem.type.split("/")[1] || "png";
+    const file = new File([blob], `pasted-image-${Date.now()}.${ext}`, { type: imageItem.type });
+    handleFilesSelected([file]);
+  }
+
   async function handleRemoveAttachment(attachment) {
     if (!selectedNote) return;
     try {
@@ -673,7 +691,23 @@ export default function WorkspaceClient() {
                       maxWidth: "100%",
                     }}
                   >
-                    <span>{a.contentType?.startsWith("image/") ? "🖼️" : "📄"}</span>
+                    {a.contentType?.startsWith("image/") ? (
+                      <a href={a.url} target="_blank" rel="noopener noreferrer" style={{ display: "flex", flexShrink: 0 }}>
+                        <img
+                          src={a.url}
+                          alt={a.name}
+                          style={{
+                            width: 32,
+                            height: 32,
+                            objectFit: "cover",
+                            borderRadius: 4,
+                            border: "1px solid rgba(44,24,16,0.15)",
+                          }}
+                        />
+                      </a>
+                    ) : (
+                      <span>📄</span>
+                    )}
                     <a
                       href={a.url}
                       target="_blank"
@@ -773,7 +807,8 @@ export default function WorkspaceClient() {
             <textarea
               value={content}
               onChange={(e) => setContent(e.target.value)}
-              placeholder="入力を始めてください…"
+              onPaste={handleTextareaPaste}
+              placeholder="入力を始めてください…（画像をペーストすると添付されます）"
               style={{
                 flex: 1,
                 border: "none",
