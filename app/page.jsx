@@ -2,8 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
-import { doc, setDoc, getDoc, serverTimestamp } from "firebase/firestore";
+import { collection, doc, setDoc, getDoc, getDocs, query, orderBy, limit, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { generateWorkspaceCode, isValidWorkspaceCode, normalizeWorkspaceCode } from "@/lib/workspaceCode";
 import {
@@ -27,10 +26,49 @@ export default function HomePage() {
   const [recentWorkspaces, setRecentWorkspaces] = useState([]);
   const [editingCode, setEditingCode] = useState(null);
   const [editingLabelValue, setEditingLabelValue] = useState("");
+  const [hasNewActivity, setHasNewActivity] = useState({});
 
   useEffect(() => {
     setRecentWorkspaces(getRecentWorkspaces());
   }, []);
+
+  // Checks each recent workspace's most recently updated note against
+  // the timestamp recorded the last time this browser visited it
+  // (see WorkspaceClient.jsx), to show a "new activity" dot for
+  // workspaces that changed since. Keyed on the set of codes (not the
+  // whole array) so renaming a label doesn't re-trigger these reads.
+  const recentCodesKey = recentWorkspaces.map((e) => e.code).join(",");
+  useEffect(() => {
+    if (!recentWorkspaces.length) return;
+    let cancelled = false;
+    (async () => {
+      const results = {};
+      await Promise.all(
+        recentWorkspaces.map(async (entry) => {
+          try {
+            const latestNoteQuery = query(
+              collection(db, "workspaces", entry.code, "notes"),
+              orderBy("updatedAt", "desc"),
+              limit(1)
+            );
+            const snap = await getDocs(latestNoteQuery);
+            if (snap.empty) return;
+            const latest = snap.docs[0].data().updatedAt;
+            const latestMillis = latest?.toMillis ? latest.toMillis() : 0;
+            results[entry.code] = latestMillis > (entry.updatedAt || 0);
+          } catch {
+            // Workspace may have been deleted or be unreachable — just
+            // skip it rather than showing an incorrect indicator.
+          }
+        })
+      );
+      if (!cancelled) setHasNewActivity(results);
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [recentCodesKey]);
 
   async function handleCreate() {
     setBusy(true);
@@ -132,6 +170,7 @@ export default function HomePage() {
       style={{
         minHeight: "100vh",
         display: "flex",
+        flexDirection: "column",
         alignItems: "center",
         justifyContent: "center",
         position: "relative",
@@ -228,7 +267,7 @@ export default function HomePage() {
                   </button>
                 </div>
 
-                <div style={{ maxHeight: 260, overflowY: "auto", marginBottom: 4 }}>
+                <div style={{ maxHeight: 420, overflowY: "auto", marginBottom: 4 }}>
                   {recentWorkspaces.map((entry) => (
                     <div
                       key={entry.code}
@@ -288,15 +327,36 @@ export default function HomePage() {
                           >
                             <div
                               style={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: 6,
                                 fontSize: 14,
                                 fontWeight: 600,
                                 color: "var(--dark-brown)",
-                                overflow: "hidden",
-                                textOverflow: "ellipsis",
-                                whiteSpace: "nowrap",
                               }}
                             >
-                              {entry.label || entry.code}
+                              <span
+                                style={{
+                                  overflow: "hidden",
+                                  textOverflow: "ellipsis",
+                                  whiteSpace: "nowrap",
+                                }}
+                              >
+                                {entry.label || entry.code}
+                              </span>
+                              {hasNewActivity[entry.code] && (
+                                <span
+                                  title="前回開いてから更新があります"
+                                  style={{
+                                    flexShrink: 0,
+                                    width: 7,
+                                    height: 7,
+                                    borderRadius: "50%",
+                                    background: "var(--amber)",
+                                    display: "inline-block",
+                                  }}
+                                />
+                              )}
                             </div>
                             {entry.label && (
                               <div style={{ fontSize: 11, color: "#a89685", marginTop: 1 }}>{entry.code}</div>
@@ -365,20 +425,6 @@ export default function HomePage() {
           </p>
         )}
       </div>
-
-      <p
-        style={{
-          position: "relative",
-          zIndex: 1,
-          marginTop: 20,
-          fontSize: 12,
-          color: "#a89685",
-        }}
-      >
-        <Link href="/terms" style={{ color: "#a89685", textDecoration: "underline" }}>
-          利用規約
-        </Link>
-      </p>
     </main>
   );
 }

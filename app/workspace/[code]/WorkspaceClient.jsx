@@ -21,6 +21,7 @@ import { ref, onDisconnect, onValue, remove, set } from "firebase/database";
 import { ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
 import { db, rtdb, storage } from "@/lib/firebase";
 import { isValidWorkspaceCode } from "@/lib/workspaceCode";
+import { addRecentWorkspace, getLastVisitedAt } from "@/lib/recentWorkspaces";
 import { MAX_ATTACHMENT_SIZE, MAX_ATTACHMENTS_PER_NOTE, formatFileSize, attachmentStoragePath } from "@/lib/attachments";
 import { makeNoteLink, extractLinkTokens, findBacklinks } from "@/lib/noteLinks";
 import GiraffeLogo from "@/components/GiraffeLogo";
@@ -63,6 +64,7 @@ export default function WorkspaceClient() {
   const [linkCopied, setLinkCopied] = useState(false);
   const [shareUrlCopied, setShareUrlCopied] = useState(false);
   const [crossWorkspaceTitles, setCrossWorkspaceTitles] = useState({});
+  const [previousVisitAt, setPreviousVisitAt] = useState(null);
 
   const saveTimer = useRef(null);
   const skipNextRemoteSync = useRef(false);
@@ -81,6 +83,26 @@ export default function WorkspaceClient() {
     });
 
     return () => unsubscribe();
+  }, [code]);
+
+  // Marks this workspace as "visited now" both on arrival and on
+  // departure. The landing page's recent-workspaces list compares a
+  // workspace's latest note activity against this timestamp to show
+  // a "new activity" indicator. Updating again on departure (rather
+  // than only on arrival) means edits made during THIS visit — by
+  // this user or a collaborator watching it happen live — aren't
+  // misreported as "new" the next time the list is shown.
+  //
+  // The value read here (before it gets overwritten) is also what
+  // the sidebar note list compares each note's createdAt/updatedAt
+  // against, to badge notes as "new" or "updated" since last time.
+  useEffect(() => {
+    if (!code || !isValidWorkspaceCode(code)) return;
+    setPreviousVisitAt(getLastVisitedAt(code));
+    addRecentWorkspace(code);
+    return () => {
+      addRecentWorkspace(code);
+    };
   }, [code]);
 
   // Cross-workspace links navigate here with ?open=<noteId>. Once the
@@ -165,6 +187,19 @@ export default function WorkspaceClient() {
     if (!selectedId) return [];
     return findBacklinks(notes, code, selectedId);
   }, [notes, selectedId, code]);
+
+  // "New" if created since the last visit; "updated" if it already
+  // existed but changed since then. Skips the note currently open —
+  // seeing a badge on the thing you're actively editing is just
+  // noise, not useful information.
+  function getNoteBadge(note) {
+    if (previousVisitAt === null || note.id === selectedId) return null;
+    const createdMillis = note.createdAt?.toMillis ? note.createdAt.toMillis() : null;
+    const updatedMillis = note.updatedAt?.toMillis ? note.updatedAt.toMillis() : null;
+    if (createdMillis && createdMillis > previousVisitAt) return "new";
+    if (updatedMillis && updatedMillis > previousVisitAt) return "updated";
+    return null;
+  }
 
   // Switching notes should ALWAYS load the newly selected note's
   // content immediately — it must never be blocked by
@@ -491,6 +526,39 @@ export default function WorkspaceClient() {
                   {note.attachments?.length > 0 && "📎 "}
                   {note.title || "無題のノート"}
                 </span>
+                {getNoteBadge(note) === "new" && (
+                  <span
+                    style={{
+                      flexShrink: 0,
+                      fontSize: 9,
+                      fontWeight: 700,
+                      letterSpacing: "0.03em",
+                      color: "var(--dark-brown)",
+                      background: "var(--amber)",
+                      padding: "2px 6px",
+                      borderRadius: 4,
+                    }}
+                  >
+                    NEW
+                  </span>
+                )}
+                {getNoteBadge(note) === "updated" && (
+                  <span
+                    style={{
+                      flexShrink: 0,
+                      fontSize: 9,
+                      fontWeight: 700,
+                      letterSpacing: "0.03em",
+                      color: "#8a5a3c",
+                      background: "var(--cream)",
+                      border: "1px solid rgba(44,24,16,0.15)",
+                      padding: "2px 6px",
+                      borderRadius: 4,
+                    }}
+                  >
+                    更新
+                  </span>
+                )}
               </div>
               <p
                 style={{
@@ -661,7 +729,59 @@ export default function WorkspaceClient() {
                 </button>
               </div>
             </div>
-            {(selectedNote.attachments?.length > 0 || attachmentError) && (
+            {selectedNote.attachments?.some((a) => a.contentType?.startsWith("image/")) && (
+              <div
+                style={{
+                  padding: "14px 20px",
+                  borderBottom: "1px solid rgba(44,24,16,0.08)",
+                  display: "flex",
+                  flexWrap: "wrap",
+                  gap: 10,
+                }}
+              >
+                {selectedNote.attachments
+                  .filter((a) => a.contentType?.startsWith("image/"))
+                  .map((a) => (
+                    <div key={a.path} style={{ position: "relative", flexShrink: 0 }}>
+                      <a href={a.url} target="_blank" rel="noopener noreferrer" style={{ display: "flex" }}>
+                        <img
+                          src={a.url}
+                          alt={a.name}
+                          style={{
+                            width: 130,
+                            height: 130,
+                            objectFit: "cover",
+                            borderRadius: 10,
+                            border: "1px solid rgba(44,24,16,0.12)",
+                            display: "block",
+                          }}
+                        />
+                      </a>
+                      <button
+                        onClick={() => handleRemoveAttachment(a)}
+                        aria-label={`${a.name}を削除`}
+                        style={{
+                          position: "absolute",
+                          top: 4,
+                          right: 4,
+                          width: 22,
+                          height: 22,
+                          borderRadius: "50%",
+                          border: "none",
+                          background: "rgba(44,24,16,0.65)",
+                          color: "#fff",
+                          fontSize: 13,
+                          lineHeight: 1,
+                          cursor: "pointer",
+                        }}
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))}
+              </div>
+            )}
+            {(selectedNote.attachments?.some((a) => !a.contentType?.startsWith("image/")) || attachmentError) && (
               <div
                 style={{
                   padding: "12px 20px",
@@ -676,72 +796,58 @@ export default function WorkspaceClient() {
                     {attachmentError}
                   </p>
                 )}
-                {selectedNote.attachments?.map((a) => (
-                  <div
-                    key={a.path}
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 6,
-                      padding: "6px 8px",
-                      borderRadius: 8,
-                      background: "var(--cream)",
-                      border: "1px solid rgba(44,24,16,0.1)",
-                      fontSize: 12,
-                      maxWidth: "100%",
-                    }}
-                  >
-                    {a.contentType?.startsWith("image/") ? (
-                      <a href={a.url} target="_blank" rel="noopener noreferrer" style={{ display: "flex", flexShrink: 0 }}>
-                        <img
-                          src={a.url}
-                          alt={a.name}
-                          style={{
-                            width: 32,
-                            height: 32,
-                            objectFit: "cover",
-                            borderRadius: 4,
-                            border: "1px solid rgba(44,24,16,0.15)",
-                          }}
-                        />
-                      </a>
-                    ) : (
+                {selectedNote.attachments
+                  ?.filter((a) => !a.contentType?.startsWith("image/"))
+                  .map((a) => (
+                    <div
+                      key={a.path}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 6,
+                        padding: "6px 8px",
+                        borderRadius: 8,
+                        background: "var(--cream)",
+                        border: "1px solid rgba(44,24,16,0.1)",
+                        fontSize: 12,
+                        maxWidth: "100%",
+                      }}
+                    >
                       <span>📄</span>
-                    )}
-                    <a
-                      href={a.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      style={{
-                        color: "var(--dark-brown)",
-                        textDecoration: "none",
-                        fontWeight: 600,
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        whiteSpace: "nowrap",
-                        maxWidth: 180,
-                      }}
-                    >
-                      {a.name}
-                    </a>
-                    <span style={{ color: "#a89685" }}>{formatFileSize(a.size)}</span>
-                    <button
-                      onClick={() => handleRemoveAttachment(a)}
-                      aria-label={`${a.name}を削除`}
-                      style={{
-                        border: "none",
-                        background: "transparent",
-                        color: "#a89685",
-                        cursor: "pointer",
-                        fontSize: 14,
-                        lineHeight: 1,
-                        padding: "0 2px",
-                      }}
-                    >
-                      ×
-                    </button>
-                  </div>
-                ))}
+                      <a
+                        href={a.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{
+                          color: "var(--dark-brown)",
+                          textDecoration: "none",
+                          fontWeight: 600,
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                          maxWidth: 180,
+                        }}
+                      >
+                        {a.name}
+                      </a>
+                      <span style={{ color: "#a89685" }}>{formatFileSize(a.size)}</span>
+                      <button
+                        onClick={() => handleRemoveAttachment(a)}
+                        aria-label={`${a.name}を削除`}
+                        style={{
+                          border: "none",
+                          background: "transparent",
+                          color: "#a89685",
+                          cursor: "pointer",
+                          fontSize: 14,
+                          lineHeight: 1,
+                          padding: "0 2px",
+                        }}
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))}
               </div>
             )}
             {(sameWorkspaceOutgoing.length > 0 || crossWorkspaceOutgoing.length > 0 || backlinks.length > 0) && (
