@@ -7,5 +7,10 @@ export default function sitemap() {
       changeFrequency: "monthly",
       priority: 1,
     },
+    {
+      url: `${siteUrl}/terms`,
+      changeFrequency: "yearly",
+      priority: 0.3,
+    },
   ];
 }
