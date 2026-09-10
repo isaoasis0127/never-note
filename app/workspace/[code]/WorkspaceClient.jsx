@@ -65,6 +65,7 @@ export default function WorkspaceClient() {
   const [shareUrlCopied, setShareUrlCopied] = useState(false);
   const [crossWorkspaceTitles, setCrossWorkspaceTitles] = useState({});
   const [previousVisitAt, setPreviousVisitAt] = useState(null);
+  const [showTrash, setShowTrash] = useState(false);
 
   const saveTimer = useRef(null);
   const skipNextRemoteSync = useRef(false);
@@ -268,14 +269,34 @@ export default function WorkspaceClient() {
       content: "",
       pinned: false,
       attachments: [],
+      trashed: false,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     });
     setSelectedId(docRef.id);
   }
 
+  // Moves a note to the trash rather than deleting it outright — no
+  // confirm dialog needed since this step is reversible (see
+  // handleRestoreNote / handlePermanentDelete below).
   async function handleDelete(noteId) {
-    if (!window.confirm("このノートを削除しますか？添付ファイルも削除されます。")) return;
+    await updateDoc(doc(db, "workspaces", code, "notes", noteId), {
+      trashed: true,
+      trashedAt: serverTimestamp(),
+    });
+    if (selectedId === noteId) setSelectedId(null);
+  }
+
+  async function handleRestoreNote(noteId) {
+    await updateDoc(doc(db, "workspaces", code, "notes", noteId), {
+      trashed: false,
+    });
+  }
+
+  // The actual, irreversible delete — only reachable from the trash
+  // view, with its own confirmation.
+  async function handlePermanentDelete(noteId) {
+    if (!window.confirm("完全に削除しますか？この操作は元に戻せません。添付ファイルも削除されます。")) return;
     const note = notes.find((n) => n.id === noteId);
     // Best-effort cleanup: Storage files aren't automatically removed
     // when a Firestore doc is deleted, so remove them explicitly.
@@ -396,7 +417,10 @@ export default function WorkspaceClient() {
     router.push("/");
   }
 
+  const trashedNotes = notes.filter((n) => n.trashed);
+
   const filtered = notes
+    .filter((n) => !n.trashed)
     .filter((n) => {
       if (!searchTerm.trim()) return true;
       const t = searchTerm.toLowerCase();
@@ -493,120 +517,225 @@ export default function WorkspaceClient() {
           />
         </div>
 
-        <button
-          onClick={handleNewNote}
-          className="tap-target"
-          style={{
-            margin: 14,
-            padding: "12px 0",
-            borderRadius: 8,
-            border: "none",
-            background: "var(--amber)",
-            color: "var(--dark-brown)",
-            fontWeight: 700,
-            fontSize: 14,
-          }}
-        >
-          + 新しいノート
-        </button>
-
-        <div style={{ flex: 1, overflowY: "auto", padding: "0 8px 8px" }}>
-          {loading && <p style={{ padding: "0 10px", fontSize: 12, color: "#a89685" }}>読み込み中…</p>}
-          {!loading && filtered.length === 0 && (
-            <p style={{ padding: "0 10px", fontSize: 12, color: "#a89685" }}>
-              {searchTerm ? "見つかりませんでした" : "まだノートがありません"}
-            </p>
-          )}
-          {filtered.map((note) => (
+        {showTrash ? (
+          <>
             <button
-              key={note.id}
-              type="button"
-              onClick={() => setSelectedId(note.id)}
-              className="note-list-item tap-target"
+              onClick={() => setShowTrash(false)}
+              className="tap-target"
               style={{
-                display: "block",
-                width: "100%",
-                textAlign: "left",
-                padding: "12px 10px",
+                margin: 14,
+                padding: "10px 0",
                 borderRadius: 8,
-                cursor: "pointer",
-                marginBottom: 2,
-                background: selectedId === note.id ? "var(--cream)" : "transparent",
-                border: selectedId === note.id ? "1px solid rgba(44,24,16,0.1)" : "1px solid transparent",
-                font: "inherit",
-                color: "inherit",
-                WebkitAppearance: "none",
-                appearance: "none",
+                border: "1px solid rgba(44,24,16,0.15)",
+                background: "transparent",
+                color: "var(--dark-brown)",
+                fontWeight: 600,
+                fontSize: 14,
               }}
             >
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6 }}>
-                <span
+              ← ノート一覧に戻る
+            </button>
+            <div style={{ flex: 1, overflowY: "auto", padding: "0 8px 8px" }}>
+              <p style={{ padding: "0 10px", fontSize: 12, color: "#a89685" }}>
+                {trashedNotes.length === 0
+                  ? "ゴミ箱は空です"
+                  : "元に戻すか、完全に削除できます（完全削除は元に戻せません）"}
+              </p>
+              {trashedNotes.map((note) => (
+                <div
+                  key={note.id}
                   style={{
-                    fontSize: 14,
-                    fontWeight: 600,
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                    whiteSpace: "nowrap",
+                    padding: "10px",
+                    borderRadius: 8,
+                    marginBottom: 4,
+                    border: "1px solid rgba(44,24,16,0.1)",
                   }}
                 >
-                  {note.pinned && "📌 "}
-                  {note.attachments?.length > 0 && "📎 "}
-                  {note.title || "無題のノート"}
-                </span>
-                {getNoteBadge(note) === "new" && (
-                  <span
+                  <p
                     style={{
-                      flexShrink: 0,
-                      fontSize: 9,
-                      fontWeight: 700,
-                      letterSpacing: "0.03em",
+                      margin: "0 0 8px",
+                      fontSize: 14,
+                      fontWeight: 600,
                       color: "var(--dark-brown)",
-                      background: "var(--amber)",
-                      padding: "2px 6px",
-                      borderRadius: 4,
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
                     }}
                   >
-                    NEW
-                  </span>
-                )}
-                {getNoteBadge(note) === "updated" && (
-                  <span
-                    style={{
-                      flexShrink: 0,
-                      fontSize: 9,
-                      fontWeight: 700,
-                      letterSpacing: "0.03em",
-                      color: "var(--dark-brown)",
-                      background: "var(--amber)",
-                      padding: "2px 6px",
-                      borderRadius: 4,
-                    }}
-                  >
-                    更新
-                  </span>
-                )}
-              </div>
-              <p
-                style={{
-                  margin: "3px 0 0",
-                  fontSize: 12,
-                  color: "#a89685",
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  whiteSpace: "nowrap",
-                }}
-              >
-                {(note.content || "内容なし").slice(0, 60)}
-              </p>
+                    {note.title || "無題のノート"}
+                  </p>
+                  <div style={{ display: "flex", gap: 6 }}>
+                    <button
+                      onClick={() => handleRestoreNote(note.id)}
+                      className="tap-target"
+                      style={{
+                        flex: 1,
+                        border: "1px solid rgba(44,24,16,0.15)",
+                        background: "var(--cream)",
+                        borderRadius: 6,
+                        padding: "6px 0",
+                        fontSize: 12,
+                        color: "var(--dark-brown)",
+                        fontWeight: 600,
+                      }}
+                    >
+                      元に戻す
+                    </button>
+                    <button
+                      onClick={() => handlePermanentDelete(note.id)}
+                      className="tap-target"
+                      style={{
+                        flex: 1,
+                        border: "1px solid rgba(44,24,16,0.15)",
+                        background: "transparent",
+                        borderRadius: 6,
+                        padding: "6px 0",
+                        fontSize: 12,
+                        color: "#b3401f",
+                        fontWeight: 600,
+                      }}
+                    >
+                      完全に削除
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
+        ) : (
+          <>
+            <button
+              onClick={handleNewNote}
+              className="tap-target"
+              style={{
+                margin: 14,
+                padding: "12px 0",
+                borderRadius: 8,
+                border: "none",
+                background: "var(--amber)",
+                color: "var(--dark-brown)",
+                fontWeight: 700,
+                fontSize: 14,
+              }}
+            >
+              + 新しいノート
             </button>
-          ))}
-        </div>
+
+            <div style={{ flex: 1, overflowY: "auto", padding: "0 8px 8px" }}>
+              {loading && <p style={{ padding: "0 10px", fontSize: 12, color: "#a89685" }}>読み込み中…</p>}
+              {!loading && filtered.length === 0 && (
+                <p style={{ padding: "0 10px", fontSize: 12, color: "#a89685" }}>
+                  {searchTerm ? "見つかりませんでした" : "まだノートがありません"}
+                </p>
+              )}
+              {filtered.map((note) => (
+                <button
+                  key={note.id}
+                  type="button"
+                  onClick={() => setSelectedId(note.id)}
+                  className="note-list-item tap-target"
+                  style={{
+                    display: "block",
+                    width: "100%",
+                    textAlign: "left",
+                    padding: "12px 10px",
+                    borderRadius: 8,
+                    cursor: "pointer",
+                    marginBottom: 2,
+                    background: selectedId === note.id ? "var(--cream)" : "transparent",
+                    border: selectedId === note.id ? "1px solid rgba(44,24,16,0.1)" : "1px solid transparent",
+                    font: "inherit",
+                    color: "inherit",
+                    WebkitAppearance: "none",
+                    appearance: "none",
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6 }}>
+                    <span
+                      style={{
+                        fontSize: 14,
+                        fontWeight: 600,
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {note.pinned && "📌 "}
+                      {note.attachments?.length > 0 && "📎 "}
+                      {note.title || "無題のノート"}
+                    </span>
+                    {getNoteBadge(note) === "new" && (
+                      <span
+                        style={{
+                          flexShrink: 0,
+                          fontSize: 9,
+                          fontWeight: 700,
+                          letterSpacing: "0.03em",
+                          color: "var(--dark-brown)",
+                          background: "var(--amber)",
+                          padding: "2px 6px",
+                          borderRadius: 4,
+                        }}
+                      >
+                        NEW
+                      </span>
+                    )}
+                    {getNoteBadge(note) === "updated" && (
+                      <span
+                        style={{
+                          flexShrink: 0,
+                          fontSize: 9,
+                          fontWeight: 700,
+                          letterSpacing: "0.03em",
+                          color: "var(--dark-brown)",
+                          background: "var(--amber)",
+                          padding: "2px 6px",
+                          borderRadius: 4,
+                        }}
+                      >
+                        更新
+                      </span>
+                    )}
+                  </div>
+                  <p
+                    style={{
+                      margin: "3px 0 0",
+                      fontSize: 12,
+                      color: "#a89685",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {(note.content || "内容なし").slice(0, 60)}
+                  </p>
+                </button>
+              ))}
+            </div>
+          </>
+        )}
+
+        <button
+          onClick={() => setShowTrash(true)}
+          className="tap-target"
+          style={{
+            margin: "0 14px 8px",
+            padding: "8px 0",
+            borderRadius: 8,
+            border: "none",
+            background: "transparent",
+            color: "#a89685",
+            fontSize: 12,
+          }}
+        >
+          🗑 ゴミ箱{trashedNotes.length > 0 ? `（${trashedNotes.length}）` : ""}
+        </button>
 
         <button
           onClick={handleLeave}
           className="tap-target"
           style={{
-            margin: 14,
+            margin: "0 14px 14px",
             padding: "10px 0",
             borderRadius: 8,
             border: "1px solid rgba(44,24,16,0.15)",
@@ -740,7 +869,7 @@ export default function WorkspaceClient() {
                 </button>
                 <button
                   onClick={() => handleDelete(selectedNote.id)}
-                  title="削除"
+                  title="ゴミ箱に移動"
                   className="tap-target"
                   style={{
                     border: "1px solid rgba(44,24,16,0.15)",
@@ -956,7 +1085,7 @@ export default function WorkspaceClient() {
             />
           </>
         ) : (
-          <EmptyState hasNotes={notes.length > 0} onCreate={handleNewNote} />
+          <EmptyState hasNotes={notes.some((n) => !n.trashed)} onCreate={handleNewNote} />
         )}
       </main>
     </div>

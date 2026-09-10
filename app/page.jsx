@@ -10,7 +10,6 @@ import {
   addRecentWorkspace,
   renameRecentWorkspace,
   removeRecentWorkspace,
-  clearRecentWorkspaces,
   MAX_LABEL_LENGTH,
 } from "@/lib/recentWorkspaces";
 import GiraffeLogo from "@/components/GiraffeLogo";
@@ -138,11 +137,6 @@ export default function HomePage() {
     attemptJoin(joinCode);
   }
 
-  function handleClearRecent() {
-    clearRecentWorkspaces();
-    setRecentWorkspaces([]);
-  }
-
   function handleRemoveRecent(code) {
     removeRecentWorkspace(code);
     setRecentWorkspaces(getRecentWorkspaces());
@@ -240,32 +234,17 @@ export default function HomePage() {
           <form onSubmit={handleJoin}>
             {recentWorkspaces.length > 0 && (
               <div style={{ marginBottom: 16 }}>
-                <div
+                <span
                   style={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
+                    display: "block",
+                    fontSize: 13,
+                    fontWeight: 600,
+                    color: "#5a4a3c",
                     marginBottom: 6,
                   }}
                 >
-                  <span style={{ fontSize: 13, fontWeight: 600, color: "#5a4a3c" }}>
-                    最近参加したワークスペース
-                  </span>
-                  <button
-                    type="button"
-                    onClick={handleClearRecent}
-                    style={{
-                      border: "none",
-                      background: "transparent",
-                      color: "#a89685",
-                      fontSize: 12,
-                      textDecoration: "underline",
-                      padding: 0,
-                    }}
-                  >
-                    すべて削除
-                  </button>
-                </div>
+                  最近参加したワークスペース
+                </span>
 
                 <div style={{ maxHeight: 420, overflowY: "auto", marginBottom: 4 }}>
                   {recentWorkspaces.map((entry) => (

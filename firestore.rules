@@ -38,13 +38,14 @@ service cloud.firestore {
                       && request.resource.data.attachments.size() < 21;
 
         allow update: if request.resource.data.diff(resource.data).affectedKeys()
-                        .hasOnly(['title', 'content', 'pinned', 'attachments', 'updatedAt'])
+                        .hasOnly(['title', 'content', 'pinned', 'attachments', 'updatedAt', 'trashed', 'trashedAt'])
                       && (!('title' in request.resource.data) || request.resource.data.title is string)
                       && (!('title' in request.resource.data) || request.resource.data.title.size() < 300)
                       && (!('content' in request.resource.data) || request.resource.data.content is string)
                       && (!('content' in request.resource.data) || request.resource.data.content.size() < 200000)
                       && (!('attachments' in request.resource.data) || request.resource.data.attachments is list)
-                      && (!('attachments' in request.resource.data) || request.resource.data.attachments.size() < 21);
+                      && (!('attachments' in request.resource.data) || request.resource.data.attachments.size() < 21)
+                      && (!('trashed' in request.resource.data) || request.resource.data.trashed is bool);
 
         allow delete: if true;
       }
