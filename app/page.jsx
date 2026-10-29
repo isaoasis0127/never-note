@@ -404,34 +404,6 @@ export default function HomePage() {
           </p>
         )}
       </div>
-
-      <a
-        href="https://never-card.netlify.app"
-        target="_blank"
-        rel="noopener noreferrer"
-        className="tap-target"
-        style={{
-          position: "relative",
-          zIndex: 1,
-          marginTop: 20,
-          display: "inline-flex",
-          alignItems: "center",
-          gap: 8,
-          padding: "10px 16px",
-          fontSize: 13,
-          color: "#5a4a3c",
-          textDecoration: "none",
-          background: "#fff",
-          border: "1px solid rgba(44,24,16,0.12)",
-          borderRadius: 999,
-        }}
-      >
-        <span aria-hidden="true">📇</span>
-        <span>
-          名刺もチームで共有するなら <strong style={{ color: "#10b981" }}>Never Card</strong>
-        </span>
-        <span aria-hidden="true">→</span>
-      </a>
     </main>
   );
 }
